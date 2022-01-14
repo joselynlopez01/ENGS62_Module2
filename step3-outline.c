@@ -19,96 +19,35 @@
 #include "gic.h"		/* interrupt controller interface */
 #include "xgpio.h"		/* axi gpio interface */
 #include "led.h"
+#include "io.h"
 
 /* hidden private state */
-static XGpio btnport;	       /* btn GPIO port instance */
 static int pushes=0;	       /* variable used to count interrupts */
-static bool pushed = false; 		   /* keeps track on when the button has already been pushed*/
-static u32 button;
-static u32 led_reg;
 
-#define INPUT 1
-#define CHANNEL1 1							/* channel 1 of the GPIO port */
-#define BUTTON0 0x1
-#define BUTTON1 0x2
-#define BUTTON2 0x4
-#define BUTTON3 0x8
-/*
- * controll is passed to this function when a button is pushed
- *
- * devicep -- ptr to the device that caused the interrupt
- */
-void btn_handler(void *devicep) {
-	/* coerce the generic pointer into a gpio */
-	button = XGpio_DiscreteRead(&btnport, CHANNEL1);
-	if (pushed == false ){ // Pushing down on the button
-		if (button == BUTTON0 || button == BUTTON1 || button == BUTTON2 || button == BUTTON3){
-			pushed = true;
-			if (button == BUTTON0){
-				led_reg = 0;
-			} else if (button == BUTTON1){
-				led_reg = 1;
-			} else if (button == BUTTON2){
-				led_reg = 2;
-			} else if (button == BUTTON3){
-				led_reg = 3;
-			}
-		}
-	} else {
-		XGpio *dev = (XGpio*)devicep;
-		pushes++;
-		/*printf(".");
-		fflush(stdout);*/
-		led_toggle(led_reg);
-		pushed = false;
-	}
-	XGpio_InterruptClear(&btnport, XGPIO_IR_CH1_MASK);
-
+void callback(u32 led_reg){
+	pushes++;
+	led_toggle(led_reg);
 }
 
 
 int main() {
-  init_platform();				
-
-  /* initialize the gic (c.f. gic.h) */
-  s32 answer = gic_init();
-
-  /* initialize btnport (c.f. module 1) and immediately dissable interrupts */
-  init_platform();							/* initialize the hardware platform */
+  init_platform();
   led_init();
-  XGpio_Initialize(&btnport, XPAR_AXI_GPIO_1_DEVICE_ID);	/* initialize device AXI_GPIO_0 */
-  XGpio_SetDataDirection(&btnport, CHANNEL1, INPUT);	    /* set tristate buffer to output */
-  XGpio_InterruptDisable(&btnport, XGPIO_IR_CH1_MASK);
 
-  /* connect handler to the gic (c.f. gic.h) */
-  //s32 gic_connect(u32 id, Xil_InterruptHandler handler,  void *devp);
-  int gic_connect_success = gic_connect(XPAR_FABRIC_GPIO_1_VEC_ID , btn_handler, &btnport);
-//  printf("gic_connect_success = %d\n\r", gic_connect_success);
-//  fflush(stdout);
+	s32 answer = gic_init(); /* initialize the gic (c.f. gic.h) */
 
-  /* enable interrupts on channel (c.f. table 2.1) */
-  XGpio_InterruptEnable(&btnport, XGPIO_IR_CH1_MASK); //returns void
-
-  /* enable interrupt to processor (c.f. table 2.1) */
-  XGpio_InterruptGlobalEnable(&btnport); //returns void
-
+	if (answer == 0){
+		io_btn_init(callback);
+	} else return 1;
 
   printf("[hello]\n"); /* so we are know its alive */
   pushes=0;
-//  u32 status = 0;
-//  status = XGpio_InterruptGetStatus(&btnport);
-//  printf("%d\n\r", status);
-//  fflush(stdout);
   while(pushes<5)
 	  ; /* do nothing and handle interrups */
 
   printf("\n[done]\n");
 
-
-  /* disconnect the interrupts (c.f. gic.h) */
-  /* close the gic (c.f. gic.h)*/
-  gic_disconnect(XPAR_FABRIC_GPIO_1_VEC_ID);
-  gic_close();
+  io_btn_close();
 
   cleanup_platform(); /* cleanup the hardware platform */
   return 0;
