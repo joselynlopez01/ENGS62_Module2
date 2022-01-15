@@ -24,11 +24,10 @@
 /* hidden private state */
 static int pushes=0;	       /* variable used to count interrupts */
 
-void callback(u32 led_reg){
+void callback(u32 led_num){
 	pushes++;
-	led_toggle(led_reg);
+	led_toggle(led_num);
 }
-
 
 int main() {
   init_platform();
@@ -38,16 +37,19 @@ int main() {
 
 	if (answer == 0){
 		io_btn_init(callback);
+		io_sw_init(callback);
 	} else return 1;
 
   printf("[hello]\n"); /* so we are know its alive */
   pushes=0;
-  while(pushes<5)
+  while(pushes<30)
 	  ; /* do nothing and handle interrups */
 
   printf("\n[done]\n");
 
   io_btn_close();
+  io_sw_close();
+  gic_close();
 
   cleanup_platform(); /* cleanup the hardware platform */
   return 0;
